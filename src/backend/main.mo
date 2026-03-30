@@ -200,28 +200,67 @@ actor {
     else sorted;
   };
 
+  /// Transform function: strips response headers so all replica nodes
+  /// return identical output (required for IC HTTP outcall consensus).
+  public func transformResponse(raw : { response : HttpResponsePayload; context : [Nat8] }) : async HttpResponsePayload {
+    {
+      status = raw.response.status;
+      headers = [];
+      body = raw.response.body;
+    };
+  };
+
   /// Fetch live prices from Yahoo Finance via IC HTTP outcall.
   /// symbolsParam: comma-separated Yahoo Finance symbols, e.g. "AAPL,GC=F,RELIANCE.NS"
   /// Returns raw JSON string from Yahoo Finance API.
   public shared func fetchYahooPrices(symbolsParam : Text) : async Text {
-    let url = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=" # symbolsParam # "&fields=regularMarketPrice,symbol";
+    let url = "https://query1.finance.yahoo.com/v8/finance/quote?symbols=" # symbolsParam # "&fields=regularMarketPrice,symbol";
     let request : HttpRequestArgs = {
       url = url;
       max_response_bytes = ?500_000;
       headers = [
-        { name = "User-Agent"; value = "Mozilla/5.0 (compatible)" },
+        { name = "User-Agent"; value = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
         { name = "Accept"; value = "application/json" },
+        { name = "Accept-Language"; value = "en-US,en;q=0.9" },
       ];
       body = null;
       method = #get;
-      transform = null;
+      transform = ?{
+        function = transformResponse;
+        context = [];
+      };
     };
     try {
       let response = await (with cycles = 230_949_972_000) ic.http_request(request);
-      let blob = Blob.fromArray(response.body);
-      switch (blob.decodeUtf8()) {
-        case (?t) t;
-        case null "";
+      if (response.status >= 200 and response.status < 300) {
+        let blob = Blob.fromArray(response.body);
+        switch (blob.decodeUtf8()) {
+          case (?t) t;
+          case null "";
+        };
+      } else {
+        // Try v7 as fallback
+        let url2 = "https://query2.finance.yahoo.com/v7/finance/quote?symbols=" # symbolsParam # "&fields=regularMarketPrice,symbol";
+        let req2 : HttpRequestArgs = {
+          url = url2;
+          max_response_bytes = ?500_000;
+          headers = [
+            { name = "User-Agent"; value = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+            { name = "Accept"; value = "application/json" },
+          ];
+          body = null;
+          method = #get;
+          transform = ?{
+            function = transformResponse;
+            context = [];
+          };
+        };
+        let r2 = await (with cycles = 230_949_972_000) ic.http_request(req2);
+        let blob2 = Blob.fromArray(r2.body);
+        switch (blob2.decodeUtf8()) {
+          case (?t) t;
+          case null "";
+        };
       };
     } catch (_) {
       "";

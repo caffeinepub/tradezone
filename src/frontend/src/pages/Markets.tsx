@@ -9,7 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Search, Zap } from "lucide-react";
+import { Loader2, RefreshCw, Search, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { TradeModal } from "../components/TradeModal";
 import {
@@ -27,6 +27,7 @@ interface MarketsProps {
   prices: Record<string, number>;
   lastUpdated: Date | null;
   isLive: boolean;
+  refresh: () => void;
   portfolio: Holding[];
   profile: Profile | null;
   onBuy: (symbol: string, qty: number, price: number) => Promise<boolean>;
@@ -56,11 +57,14 @@ function MarketStatusBadge({ symbol }: { symbol: string }) {
 function LiveStatusBar({
   isLive,
   lastUpdated,
+  onRefresh,
 }: {
   isLive: boolean;
   lastUpdated: Date | null;
+  onRefresh: () => void;
 }) {
   const [secondsAgo, setSecondsAgo] = useState<number | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     if (!lastUpdated) return;
@@ -71,6 +75,13 @@ function LiveStatusBar({
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [lastUpdated]);
+
+  async function handleRefresh() {
+    setIsRefreshing(true);
+    onRefresh();
+    // show spinner for at least 1.5s so user sees feedback
+    setTimeout(() => setIsRefreshing(false), 3000);
+  }
 
   return (
     <div
@@ -97,7 +108,7 @@ function LiveStatusBar({
         {isLive ? "Prices updating every 15s" : "Fetching live prices"}
       </span>
       {isLive && secondsAgo !== null && (
-        <span className="text-muted-foreground ml-auto">
+        <span className="text-muted-foreground">
           Last updated:{" "}
           <span className="text-foreground font-semibold">
             {secondsAgo < 5
@@ -108,6 +119,17 @@ function LiveStatusBar({
           </span>
         </span>
       )}
+      <Button
+        size="sm"
+        variant="ghost"
+        className="ml-auto h-6 px-2 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+        onClick={handleRefresh}
+        disabled={isRefreshing}
+        data-ocid="markets.refresh.button"
+      >
+        <RefreshCw size={11} className={isRefreshing ? "animate-spin" : ""} />
+        {isRefreshing ? "Refreshing..." : "Refresh"}
+      </Button>
     </div>
   );
 }
@@ -225,6 +247,7 @@ export function Markets({
   prices,
   lastUpdated,
   isLive,
+  refresh,
   portfolio,
   profile,
   onBuy,
@@ -328,8 +351,12 @@ export function Markets({
         </div>
       </div>
 
-      {/* Live status indicator */}
-      <LiveStatusBar isLive={isLive} lastUpdated={lastUpdated} />
+      {/* Live status indicator with Refresh button */}
+      <LiveStatusBar
+        isLive={isLive}
+        lastUpdated={lastUpdated}
+        onRefresh={refresh}
+      />
 
       {/* Dynamic live search section */}
       {noLocalMatch && (

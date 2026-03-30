@@ -26,7 +26,12 @@ function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  const { prices, lastUpdated, isLive } = useAllPrices();
+  const {
+    prices,
+    lastUpdated,
+    isLive,
+    refresh: refreshPrices,
+  } = useAllPrices();
   const trading = useTradingData();
   const refreshRef = useRef(trading.refresh);
   refreshRef.current = trading.refresh;
@@ -82,6 +87,7 @@ function AppContent() {
             prices={prices}
             lastUpdated={lastUpdated}
             isLive={isLive}
+            refresh={refreshPrices}
             portfolio={trading.portfolio}
             profile={trading.profile}
             onBuy={trading.executeBuy}
