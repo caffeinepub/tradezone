@@ -90,9 +90,36 @@ export class ExternalBlob {
     }
 }
 export interface backendInterface {
+    initUser(): Promise<undefined>;
+    setDisplayName(name: string): Promise<undefined>;
+    reportPortfolioValue(value: number): Promise<undefined>;
+    getProfile(): Promise<{ balance: number }>;
+    getPortfolio(): Promise<Array<{ symbol: string; quantity: number; avgBuyPrice: number }>>;
+    getTradeHistory(): Promise<Array<{ symbol: string; action: string; quantity: number; price: number; timestamp: bigint }>>;
+    getWatchlist(): Promise<string[]>;
+    addToWatchlist(symbol: string): Promise<undefined>;
+    removeFromWatchlist(symbol: string): Promise<undefined>;
+    buyStock(symbol: string, quantity: number, price: number): Promise<{ ok: boolean; message: string }>;
+    sellStock(symbol: string, quantity: number, price: number): Promise<{ ok: boolean; message: string }>;
+    getLeaderboard(): Promise<Array<{ userId: string; displayName: string; balance: number; portfolioValue: number }>>;
+    fetchYahooPrices(symbols: string): Promise<string>;
 }
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
+
+    initUser = () => this.actor.initUser();
+    setDisplayName = (name: string) => this.actor.setDisplayName(name);
+    reportPortfolioValue = (value: number) => this.actor.reportPortfolioValue(value);
+    getProfile = () => this.actor.getProfile();
+    getPortfolio = () => this.actor.getPortfolio();
+    getTradeHistory = () => this.actor.getTradeHistory();
+    getWatchlist = () => this.actor.getWatchlist();
+    addToWatchlist = (symbol: string) => this.actor.addToWatchlist(symbol);
+    removeFromWatchlist = (symbol: string) => this.actor.removeFromWatchlist(symbol);
+    buyStock = (symbol: string, qty: number, price: number) => this.actor.buyStock(symbol, qty, price);
+    sellStock = (symbol: string, qty: number, price: number) => this.actor.sellStock(symbol, qty, price);
+    getLeaderboard = () => this.actor.getLeaderboard();
+    fetchYahooPrices = (symbols: string) => this.actor.fetchYahooPrices(symbols);
 }
 export interface CreateActorOptions {
     agent?: Agent;
