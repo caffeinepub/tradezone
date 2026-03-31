@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -7,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Medal, Trophy } from "lucide-react";
+import { Medal, RefreshCw, Trophy, Users } from "lucide-react";
 import type { LeaderboardEntry } from "../hooks/useTradingData";
 
 interface LeaderboardProps {
@@ -15,64 +16,35 @@ interface LeaderboardProps {
   currentUserId?: string;
   userPortfolioValue: number;
   profile: { balance: number } | null;
+  onRefresh?: () => Promise<void>;
 }
-
-const MOCK_LEADERBOARD: LeaderboardEntry[] = [
-  {
-    userId: "Dhairya-Devang-Shah",
-    displayName: "DHAIRYA DEVANG SHAH",
-    balance: 112000,
-    portfolioValue: 23400,
-  },
-  {
-    userId: "2vxky-m3abc",
-    displayName: "",
-    balance: 98000,
-    portfolioValue: 31500,
-  },
-  {
-    userId: "trader-xyz",
-    displayName: "",
-    balance: 87000,
-    portfolioValue: 28000,
-  },
-  {
-    userId: "aapl-bull-99",
-    displayName: "",
-    balance: 76000,
-    portfolioValue: 19200,
-  },
-  {
-    userId: "nifty-king-47",
-    displayName: "",
-    balance: 65000,
-    portfolioValue: 15800,
-  },
-];
 
 export function Leaderboard({
   leaderboard,
   currentUserId,
   userPortfolioValue,
   profile,
+  onRefresh,
 }: LeaderboardProps) {
-  const data = leaderboard.length > 0 ? leaderboard : MOCK_LEADERBOARD;
   const balance = profile?.balance ?? 1000000;
 
-  const enriched = data
-    .map((e) => ({ ...e, total: e.balance + e.portfolioValue }))
+  const STARTING_BALANCE = 1_000_000;
+
+  const enriched = leaderboard
+    .map((e) => {
+      const total = e.balance + e.portfolioValue;
+      const returnPct = ((total - STARTING_BALANCE) / STARTING_BALANCE) * 100;
+      return { ...e, total, return: returnPct };
+    })
     .sort((a, b) => b.total - a.total)
     .slice(0, 10);
 
   function truncate(entry: LeaderboardEntry): string {
-    // Prefer backend-provided display name
     if (entry.displayName) return entry.displayName;
-    // Fallback: format the userId
     const id = entry.userId;
     if (id === "You") return "You";
-    if (id === "Dhairya-Devang-Shah") return "DHAIRYA DEVANG SHAH";
-    if (id.length > 12) return `${id.slice(0, 6)}...${id.slice(-4)}`;
-    return id;
+    // Show readable fallback for unnamed users
+    return `Trader #${id.slice(-4)}`;
   }
 
   function rankIcon(rank: number) {
@@ -84,85 +56,133 @@ export function Leaderboard({
     );
   }
 
+  const userReturn =
+    ((balance + userPortfolioValue - STARTING_BALANCE) / STARTING_BALANCE) *
+    100;
+
   return (
     <div className="p-4 md:p-6 space-y-4">
-      <h1 className="text-xl font-bold text-foreground">🏆 Leaderboard</h1>
-      <p className="text-sm text-muted-foreground">
-        Top paper traders by total portfolio value
-      </p>
-
-      <div className="bg-card border border-border rounded-md overflow-auto">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-border hover:bg-transparent">
-              <TableHead className="text-muted-foreground w-12">Rank</TableHead>
-              <TableHead className="text-muted-foreground">Trader</TableHead>
-              <TableHead className="text-muted-foreground text-right">
-                Balance
-              </TableHead>
-              <TableHead className="text-muted-foreground text-right">
-                Portfolio Value
-              </TableHead>
-              <TableHead className="text-muted-foreground text-right">
-                Total Value
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {enriched.map((entry, i) => {
-              const isCurrent =
-                entry.userId === currentUserId || entry.userId === "You";
-              return (
-                <TableRow
-                  key={entry.userId}
-                  className={`border-border ${
-                    isCurrent
-                      ? "bg-teal/8 border-l-2 border-l-teal"
-                      : "hover:bg-secondary/40"
-                  }`}
-                  data-ocid={`leaderboard.trader.item.${i + 1}`}
-                >
-                  <TableCell>
-                    <div className="flex items-center justify-center">
-                      {rankIcon(i + 1)}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`font-medium text-sm ${
-                          isCurrent ? "text-teal" : "text-foreground"
-                        }`}
-                      >
-                        {truncate(entry)}
-                      </span>
-                      {isCurrent && (
-                        <Badge className="text-[10px] px-1 py-0 bg-teal/20 text-teal border-0">
-                          You
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-foreground">
-                    ₹{entry.balance.toLocaleString("en-IN")}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-positive">
-                    ₹{entry.portfolioValue.toLocaleString("en-IN")}
-                  </TableCell>
-                  <TableCell className="text-right font-mono font-bold text-teal">
-                    ₹{entry.total.toLocaleString("en-IN")}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">🏆 Leaderboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Top paper traders by total portfolio value
+          </p>
+        </div>
+        {onRefresh && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void onRefresh()}
+            className="gap-1.5 text-xs"
+            data-ocid="leaderboard.secondary_button"
+          >
+            <RefreshCw size={13} />
+            Refresh
+          </Button>
+        )}
       </div>
+
+      {enriched.length === 0 ? (
+        <div
+          className="bg-card border border-border rounded-md flex flex-col items-center justify-center py-16 gap-3"
+          data-ocid="leaderboard.empty_state"
+        >
+          <Users size={36} className="text-muted-foreground/40" />
+          <p className="text-muted-foreground text-sm">
+            No traders yet — be the first!
+          </p>
+          <p className="text-muted-foreground/60 text-xs">
+            Log in and save your name to appear here.
+          </p>
+        </div>
+      ) : (
+        <div className="bg-card border border-border rounded-md overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border hover:bg-transparent">
+                <TableHead className="text-muted-foreground w-12">
+                  Rank
+                </TableHead>
+                <TableHead className="text-muted-foreground">Trader</TableHead>
+                <TableHead className="text-muted-foreground text-right">
+                  Balance
+                </TableHead>
+                <TableHead className="text-muted-foreground text-right">
+                  Portfolio Value
+                </TableHead>
+                <TableHead className="text-muted-foreground text-right">
+                  Total Value
+                </TableHead>
+                <TableHead className="text-muted-foreground text-right">
+                  % Return
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {enriched.map((entry, i) => {
+                const isCurrent =
+                  entry.userId === currentUserId || entry.userId === "You";
+                return (
+                  <TableRow
+                    key={entry.userId}
+                    className={`border-border ${
+                      isCurrent
+                        ? "bg-teal/8 border-l-2 border-l-teal"
+                        : "hover:bg-secondary/40"
+                    }`}
+                    data-ocid={`leaderboard.trader.item.${i + 1}`}
+                  >
+                    <TableCell>
+                      <div className="flex items-center justify-center">
+                        {rankIcon(i + 1)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`font-medium text-sm ${
+                            isCurrent ? "text-teal" : "text-foreground"
+                          }`}
+                        >
+                          {truncate(entry)}
+                        </span>
+                        {isCurrent && (
+                          <Badge className="text-[10px] px-1 py-0 bg-teal/20 text-teal border-0">
+                            You
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-foreground">
+                      ₹{entry.balance.toLocaleString("en-IN")}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-positive">
+                      ₹{entry.portfolioValue.toLocaleString("en-IN")}
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-bold text-teal">
+                      ₹{entry.total.toLocaleString("en-IN")}
+                    </TableCell>
+                    <TableCell
+                      className={`text-right font-mono font-semibold ${
+                        entry.return >= 0 ? "text-positive" : "text-negative"
+                      }`}
+                    >
+                      {entry.return >= 0 ? "+" : ""}
+                      {entry.return.toFixed(2)}%
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {/* Current user stats */}
       <div className="bg-card border border-teal/30 rounded-md p-4">
         <p className="text-xs text-muted-foreground mb-2">Your Stats</p>
-        <div className="flex gap-6 text-sm">
+        <div className="flex flex-wrap gap-6 text-sm">
           <div>
             <span className="text-muted-foreground">Balance: </span>
             <span className="font-mono font-semibold text-teal">
@@ -185,6 +205,17 @@ export function Leaderboard({
               {(balance + userPortfolioValue).toLocaleString("en-IN", {
                 maximumFractionDigits: 0,
               })}
+            </span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Return: </span>
+            <span
+              className={`font-mono font-semibold ${
+                userReturn >= 0 ? "text-positive" : "text-negative"
+              }`}
+            >
+              {userReturn >= 0 ? "+" : ""}
+              {userReturn.toFixed(2)}%
             </span>
           </div>
         </div>

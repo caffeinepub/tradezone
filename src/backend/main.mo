@@ -20,7 +20,6 @@ actor {
     timestamp : Int;
   };
 
-  // UserData stays unchanged to preserve stable variable compatibility
   type UserData = {
     userId : Text;
     balance : Float;
@@ -30,6 +29,7 @@ actor {
   };
 
   type NameEntry = { userId : Text; name : Text };
+  type PortfolioValueEntry = { userId : Text; value : Float };
 
   type Profile = { balance : Float };
   type TradeResult = { ok : Bool; message : Text };
@@ -62,9 +62,8 @@ actor {
   let ic : IC = actor ("aaaaa-aa");
 
   var users : [UserData] = [];
-
-  // Separate stable var for display names — adding a new stable var is always backward compatible
   var userNames : [NameEntry] = [];
+  var reportedPortfolioValues : [PortfolioValueEntry] = [];
 
   func findUser(id : Text) : ?UserData {
     users.find(func u { u.userId == id });
@@ -102,6 +101,13 @@ actor {
     };
   };
 
+  func lookupReportedPV(id : Text) : ?Float {
+    switch (reportedPortfolioValues.find(func e { e.userId == id })) {
+      case (?(entry)) ?entry.value;
+      case null null;
+    };
+  };
+
   public shared (msg) func initUser() : async () {
     let id = msg.caller.toText();
     if (findUser(id) == null) { upsertUser(newUser(id)) };
@@ -109,7 +115,6 @@ actor {
 
   public shared (msg) func setDisplayName(name : Text) : async () {
     let id = msg.caller.toText();
-    // Ensure user exists
     if (findUser(id) == null) { upsertUser(newUser(id)) };
     switch (userNames.find(func e { e.userId == id })) {
       case null {
@@ -118,6 +123,23 @@ actor {
       case (?_) {
         userNames := userNames.map(func e {
           if (e.userId == id) { { userId = id; name = name } } else e
+        });
+      };
+    };
+  };
+
+  /// Called by each user's frontend with their current portfolio market value.
+  /// This ensures the leaderboard shows real-time competitive rankings.
+  public shared (msg) func reportPortfolioValue(value : Float) : async () {
+    let id = msg.caller.toText();
+    if (findUser(id) == null) { upsertUser(newUser(id)) };
+    switch (reportedPortfolioValues.find(func e { e.userId == id })) {
+      case null {
+        reportedPortfolioValues := reportedPortfolioValues.concat([{ userId = id; value = value }]);
+      };
+      case (?_) {
+        reportedPortfolioValues := reportedPortfolioValues.map(func e {
+          if (e.userId == id) { { userId = id; value = value } } else e
         });
       };
     };
@@ -216,7 +238,11 @@ actor {
 
   public shared func getLeaderboard() : async [LeaderboardEntry] {
     let entries = users.map(func u {
-      let pv = u.holdings.foldLeft(0.0, func(acc, h) { acc + h.quantity * h.avgBuyPrice });
+      // Use user-reported market value when available; fall back to cost-basis
+      let pv : Float = switch (lookupReportedPV(u.userId)) {
+        case (?reported) reported;
+        case null u.holdings.foldLeft(0.0, func(acc, h) { acc + h.quantity * h.avgBuyPrice });
+      };
       let e : LeaderboardEntry = {
         userId = u.userId;
         displayName = lookupName(u.userId);
@@ -230,12 +256,10 @@ actor {
       let bt = b.balance + b.portfolioValue;
       if (at > bt) #less else if (at < bt) #greater else #equal;
     });
-    if (sorted.size() > 20) Array.tabulate(20, func i { sorted[i] })
+    if (sorted.size() > 50) Array.tabulate(50, func i { sorted[i] })
     else sorted;
   };
 
-  /// Transform function: strips response headers so all replica nodes
-  /// return identical output (required for IC HTTP outcall consensus).
   public func transformResponse(raw : { response : HttpResponsePayload; context : [Nat8] }) : async HttpResponsePayload {
     {
       status = raw.response.status;
@@ -244,7 +268,6 @@ actor {
     };
   };
 
-  /// Fetch live prices from Yahoo Finance via IC HTTP outcall.
   public shared func fetchYahooPrices(symbolsParam : Text) : async Text {
     let url = "https://query1.finance.yahoo.com/v8/finance/quote?symbols=" # symbolsParam # "&fields=regularMarketPrice,symbol";
     let request : HttpRequestArgs = {

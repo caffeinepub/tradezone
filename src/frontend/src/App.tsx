@@ -1,6 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { Component, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { BottomNav } from "./components/BottomNav";
 import { type Page, Sidebar } from "./components/Sidebar";
 import { TickerBanner } from "./components/TickerBanner";
@@ -18,8 +18,52 @@ import { Markets } from "./pages/Markets";
 import { Portfolio } from "./pages/Portfolio";
 import { WatchlistPage } from "./pages/WatchlistPage";
 
-const queryClient = new QueryClient();
+// ── Error Boundary ──────────────────────────────────────────────────────────
+interface EBProps {
+  children: ReactNode;
+}
+interface EBState {
+  hasError: boolean;
+  error: Error | null;
+}
 
+class ErrorBoundary extends Component<EBProps, EBState> {
+  constructor(props: EBProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error): EBState {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#0d1117] flex flex-col items-center justify-center gap-4 p-6">
+          <div className="text-teal-400 text-2xl font-bold">TradeZone</div>
+          <div className="border border-red-500/40 rounded-xl p-6 max-w-sm w-full text-center space-y-3 bg-[#161b22]">
+            <p className="text-red-400 font-semibold text-sm">
+              App failed to load
+            </p>
+            <p className="text-gray-400 text-xs break-all">
+              {this.state.error?.message ?? "Unknown error"}
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="bg-teal-500 text-black px-4 py-2 rounded-md text-sm font-semibold hover:bg-teal-400 transition-colors w-full"
+            >
+              Tap to Reload
+            </button>
+          </div>
+          <p className="text-gray-600 text-xs">Built by Dhairya Devang Shah</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ── App Content ─────────────────────────────────────────────────────────────
 function AppContent() {
   const { identity, login, clear, isLoggingIn, isInitializing } =
     useInternetIdentity();
@@ -35,9 +79,13 @@ function AppContent() {
     isLive,
     refresh: refreshPrices,
   } = useAllPrices();
-  const trading = useTradingData();
+
+  const trading = useTradingData(prices);
   const refreshRef = useRef(trading.refresh);
   refreshRef.current = trading.refresh;
+
+  const refreshLeaderboardRef = useRef(trading.refreshLeaderboard);
+  refreshLeaderboardRef.current = trading.refreshLeaderboard;
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -45,7 +93,6 @@ function AppContent() {
     }
   }, [isAuthenticated]);
 
-  // Register user on backend and sync stored name when actor is ready
   useEffect(() => {
     if (!actor || actorFetching || !identity) return;
     const userId = identity.getPrincipal().toString();
@@ -63,11 +110,20 @@ function AppContent() {
     })();
   }, [actor, actorFetching, identity]);
 
+  useEffect(() => {
+    if (activePage === "Leaderboard") {
+      void refreshLeaderboardRef.current();
+    }
+  }, [activePage]);
+
   if (isInitializing) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-teal text-lg font-bold animate-pulse">
-          TradeZone
+        <div className="flex flex-col items-center gap-3">
+          <div className="text-teal text-2xl font-bold animate-pulse">
+            TradeZone
+          </div>
+          <div className="text-muted-foreground text-sm">Initializing...</div>
         </div>
       </div>
     );
@@ -149,6 +205,7 @@ function AppContent() {
             currentUserId={identity?.getPrincipal().toString()}
             userPortfolioValue={portfolioValue}
             profile={trading.profile}
+            onRefresh={trading.refreshLeaderboard}
           />
         );
       default:
@@ -169,18 +226,9 @@ function AppContent() {
           {renderPage()}
         </main>
         <footer className="hidden md:block px-4 py-2 border-t border-border text-center text-xs text-muted-foreground">
-          © {new Date().getFullYear()}. Built with ❤️ using{" "}
-          <a
-            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-            target="_blank"
-            rel="noreferrer"
-            className="text-teal hover:underline"
-          >
-            caffeine.ai
-          </a>
-          {" — "}
+          © {new Date().getFullYear()} TradeZone —{" "}
           <span className="text-foreground/60">
-            TradeZone by Dhairya Devang Shah
+            Built by Dhairya Devang Shah
           </span>
         </footer>
       </div>
@@ -195,9 +243,9 @@ function AppContent() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <ErrorBoundary>
       <AppContent />
       <Toaster richColors position="top-right" />
-    </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

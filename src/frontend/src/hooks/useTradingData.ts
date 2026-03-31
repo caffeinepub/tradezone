@@ -37,6 +37,7 @@ export interface TradingData {
   displayName: string;
   isLoading: boolean;
   refresh: () => Promise<void>;
+  refreshLeaderboard: () => Promise<void>;
   addWatch: (symbol: string) => Promise<void>;
   removeWatch: (symbol: string) => Promise<void>;
   executeBuy: (
@@ -83,7 +84,7 @@ function saveData(data: StoredData) {
   }
 }
 
-export function useTradingData(): TradingData {
+export function useTradingData(prices: Record<string, number>): TradingData {
   const { actor, isFetching } = useActor();
   const { identity } = useInternetIdentity();
   const userId = identity?.getPrincipal().toString();
@@ -93,6 +94,10 @@ export function useTradingData(): TradingData {
   // Keep a ref always in sync with latest stored — safe to read in callbacks
   const storedRef = useRef(stored);
   storedRef.current = stored;
+
+  // Keep a ref for prices — safe to read in callbacks without stale closure
+  const pricesRef = useRef(prices);
+  pricesRef.current = prices;
 
   // Persist whenever stored changes
   useEffect(() => {
@@ -105,24 +110,68 @@ export function useTradingData(): TradingData {
   // Leaderboard fetched from backend
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
+  // Keep actor ref for use in interval without stale closure
+  const actorRef = useRef(actor);
+  actorRef.current = actor;
+  const isFetchingRef = useRef(isFetching);
+  isFetchingRef.current = isFetching;
+
+  const refreshLeaderboard = useCallback(async () => {
+    const currentActor = actorRef.current;
+    if (!currentActor || isFetchingRef.current) return;
+    try {
+      const result = await (currentActor as any).getLeaderboard();
+      if (Array.isArray(result)) {
+        const mapped: LeaderboardEntry[] = result.map((e: any) => ({
+          userId: String(e.userId ?? ""),
+          displayName: String(e.displayName ?? ""),
+          balance: Number(e.balance ?? 0),
+          portfolioValue: Number(e.portfolioValue ?? 0),
+        }));
+        setLeaderboard(mapped);
+      }
+    } catch {
+      // Backend unavailable — keep existing leaderboard data
+    }
+  }, []);
+
+  // Leaderboard auto-refresh every 30 seconds
   useEffect(() => {
     if (!actor || isFetching) return;
-    (async () => {
-      try {
-        const result = await (actor as any).getLeaderboard();
-        if (Array.isArray(result) && result.length > 0) {
-          const mapped: LeaderboardEntry[] = result.map((e: any) => ({
-            userId: String(e.userId ?? ""),
-            displayName: String(e.displayName ?? ""),
-            balance: Number(e.balance ?? 0),
-            portfolioValue: Number(e.portfolioValue ?? 0),
-          }));
-          setLeaderboard(mapped);
-        }
-      } catch {
-        // Backend unavailable — fallback to local user only
-      }
-    })();
+
+    // Initial fetch
+    void refreshLeaderboard();
+
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      void refreshLeaderboard();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [actor, isFetching, refreshLeaderboard]);
+
+  // Report live portfolio market value to backend every 30 seconds
+  useEffect(() => {
+    if (!actor || isFetching) return;
+
+    function calcMarketValue(): number {
+      return storedRef.current.portfolio.reduce(
+        (sum, h) =>
+          sum + (pricesRef.current[h.symbol] ?? h.avgBuyPrice) * h.quantity,
+        0,
+      );
+    }
+
+    // Report immediately
+    void (actor as any).reportPortfolioValue(calcMarketValue()).catch(() => {});
+
+    const interval = setInterval(() => {
+      void (actor as any)
+        .reportPortfolioValue(calcMarketValue())
+        .catch(() => {});
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, [actor, isFetching]);
 
   const profile: Profile = { balance: stored.balance };
@@ -209,6 +258,13 @@ export function useTradingData(): TradingData {
       toast.success(
         `Bought ${quantity} × ${symbol} @ ${price % 1 === 0 ? price.toLocaleString("en-IN") : price.toFixed(2)}`,
       );
+
+      // Fire-and-forget: sync trade to backend so leaderboard updates
+      const a = actorRef.current;
+      if (a) {
+        void (a as any).buyStock(symbol, quantity, price).catch(() => {});
+      }
+
       return true;
     },
     [],
@@ -264,33 +320,28 @@ export function useTradingData(): TradingData {
       toast.success(
         `Sold ${quantity} × ${symbol} @ ${price % 1 === 0 ? price.toLocaleString("en-IN") : price.toFixed(2)}`,
       );
+
+      // Fire-and-forget: sync trade to backend so leaderboard updates
+      const a = actorRef.current;
+      if (a) {
+        void (a as any).sellStock(symbol, quantity, price).catch(() => {});
+      }
+
       return true;
     },
     [],
   );
-
-  // Use backend leaderboard if available; otherwise fall back to just the current user
-  const leaderboardData: LeaderboardEntry[] =
-    leaderboard.length > 0
-      ? leaderboard
-      : [
-          {
-            userId: "You",
-            displayName: displayName || "Trader",
-            balance: stored.balance,
-            portfolioValue: 0,
-          },
-        ];
 
   return {
     profile,
     portfolio: stored.portfolio,
     history: stored.history,
     watchlist: stored.watchlist,
-    leaderboard: leaderboardData,
+    leaderboard,
     displayName,
     isLoading: false,
     refresh,
+    refreshLeaderboard,
     addWatch,
     removeWatch,
     executeBuy,

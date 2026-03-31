@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { BarChart2, Loader2, Shield, TrendingUp, Trophy } from "lucide-react";
-import { motion } from "motion/react";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -10,7 +9,7 @@ interface LoginPageProps {
 const features = [
   {
     icon: <TrendingUp size={16} />,
-    text: "US & Indian stocks with live simulated prices",
+    text: "NSE/BSE & US stocks with live simulated prices",
     id: "f1",
   },
   {
@@ -30,7 +29,7 @@ const features = [
   },
   {
     icon: <Shield size={16} />,
-    text: "₹1,00,000 virtual money — zero real risk",
+    text: "\u20b910,00,000 virtual money — zero real risk",
     id: "f5",
   },
 ];
@@ -42,12 +41,7 @@ export function LoginPage({ onLogin, isLoggingIn }: LoginPageProps) {
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-teal/5 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 right-0 w-[400px] h-[300px] bg-positive/5 rounded-full blur-3xl pointer-events-none" />
 
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-md"
-      >
+      <div className="w-full max-w-md">
         <div className="bg-card border border-border rounded-xl p-8 shadow-2xl">
           {/* Logo */}
           <div className="text-center mb-8">
@@ -62,24 +56,21 @@ export function LoginPage({ onLogin, isLoggingIn }: LoginPageProps) {
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               Start Trading with{" "}
-              <span className="text-positive font-semibold">₹1,00,000</span>{" "}
+              <span className="text-positive font-semibold">₹10,00,000</span>{" "}
               Virtual Money
             </p>
           </div>
 
           {/* Features */}
           <div className="space-y-2.5 mb-8">
-            {features.map((f, i) => (
-              <motion.div
+            {features.map((f) => (
+              <div
                 key={f.id}
-                initial={{ opacity: 0, x: -16 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 + i * 0.07 }}
                 className="flex items-center gap-3 text-sm text-muted-foreground"
               >
                 <div className="text-teal flex-shrink-0">{f.icon}</div>
                 {f.text}
-              </motion.div>
+              </div>
             ))}
           </div>
 
@@ -107,17 +98,9 @@ export function LoginPage({ onLogin, isLoggingIn }: LoginPageProps) {
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-6">
-          © {new Date().getFullYear()}. Built with ❤️ using{" "}
-          <a
-            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(typeof window !== "undefined" ? window.location.hostname : "")}`}
-            target="_blank"
-            rel="noreferrer"
-            className="text-teal hover:underline"
-          >
-            caffeine.ai
-          </a>
+          © {new Date().getFullYear()} TradeZone — Built by Dhairya Devang Shah
         </p>
-      </motion.div>
+      </div>
     </div>
   );
 }
