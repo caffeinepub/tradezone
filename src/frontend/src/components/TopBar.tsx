@@ -1,25 +1,16 @@
 import { Button } from "@/components/ui/button";
-import { IndianRupee, LogOut, Menu, User } from "lucide-react";
+import { IndianRupee, LogOut, User } from "lucide-react";
 
 interface TopBarProps {
   onLogout: () => void;
   balance: number;
-  onMenuClick?: () => void;
 }
 
-export function TopBar({ onLogout, balance, onMenuClick }: TopBarProps) {
+export function TopBar({ onLogout, balance }: TopBarProps) {
   return (
     <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 flex-shrink-0">
       {/* Left */}
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          className="md:hidden text-muted-foreground hover:text-foreground"
-          onClick={onMenuClick}
-          data-ocid="topbar.menu.button"
-        >
-          <Menu size={20} />
-        </button>
         <span className="text-teal font-bold text-lg tracking-tight">
           TradeZone
         </span>
@@ -27,7 +18,7 @@ export function TopBar({ onLogout, balance, onMenuClick }: TopBarProps) {
 
       {/* Right */}
       <div className="flex items-center gap-3">
-        <div className="hidden sm:flex items-center gap-1.5 bg-secondary px-3 py-1.5 rounded-md">
+        <div className="flex items-center gap-1.5 bg-secondary px-3 py-1.5 rounded-md">
           <IndianRupee size={14} className="text-teal" />
           <span className="text-sm font-mono font-semibold text-teal">
             {balance.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
@@ -44,10 +35,10 @@ export function TopBar({ onLogout, balance, onMenuClick }: TopBarProps) {
           size="sm"
           onClick={onLogout}
           data-ocid="topbar.logout.button"
-          className="text-muted-foreground hover:text-negative"
+          className="hidden md:flex text-muted-foreground hover:text-negative"
         >
           <LogOut size={16} />
-          <span className="hidden sm:block ml-1.5">Logout</span>
+          <span className="ml-1.5">Logout</span>
         </Button>
       </div>
     </header>

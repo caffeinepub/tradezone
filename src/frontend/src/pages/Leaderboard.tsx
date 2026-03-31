@@ -18,11 +18,36 @@ interface LeaderboardProps {
 }
 
 const MOCK_LEADERBOARD: LeaderboardEntry[] = [
-  { userId: "Dhairya-Devang-Shah", balance: 112000, portfolioValue: 23400 },
-  { userId: "2vxky-m3abc", balance: 98000, portfolioValue: 31500 },
-  { userId: "trader-xyz", balance: 87000, portfolioValue: 28000 },
-  { userId: "aapl-bull-99", balance: 76000, portfolioValue: 19200 },
-  { userId: "nifty-king-47", balance: 65000, portfolioValue: 15800 },
+  {
+    userId: "Dhairya-Devang-Shah",
+    displayName: "DHAIRYA DEVANG SHAH",
+    balance: 112000,
+    portfolioValue: 23400,
+  },
+  {
+    userId: "2vxky-m3abc",
+    displayName: "",
+    balance: 98000,
+    portfolioValue: 31500,
+  },
+  {
+    userId: "trader-xyz",
+    displayName: "",
+    balance: 87000,
+    portfolioValue: 28000,
+  },
+  {
+    userId: "aapl-bull-99",
+    displayName: "",
+    balance: 76000,
+    portfolioValue: 19200,
+  },
+  {
+    userId: "nifty-king-47",
+    displayName: "",
+    balance: 65000,
+    portfolioValue: 15800,
+  },
 ];
 
 export function Leaderboard({
@@ -39,7 +64,12 @@ export function Leaderboard({
     .sort((a, b) => b.total - a.total)
     .slice(0, 10);
 
-  function truncate(id: string): string {
+  function truncate(entry: LeaderboardEntry): string {
+    // Prefer backend-provided display name
+    if (entry.displayName) return entry.displayName;
+    // Fallback: format the userId
+    const id = entry.userId;
+    if (id === "You") return "You";
     if (id === "Dhairya-Devang-Shah") return "DHAIRYA DEVANG SHAH";
     if (id.length > 12) return `${id.slice(0, 6)}...${id.slice(-4)}`;
     return id;
@@ -81,8 +111,7 @@ export function Leaderboard({
           <TableBody>
             {enriched.map((entry, i) => {
               const isCurrent =
-                entry.userId === currentUserId ||
-                entry.userId === "Dhairya-Devang-Shah";
+                entry.userId === currentUserId || entry.userId === "You";
               return (
                 <TableRow
                   key={entry.userId}
@@ -101,9 +130,11 @@ export function Leaderboard({
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span
-                        className={`font-medium text-sm ${isCurrent ? "text-teal" : "text-foreground"}`}
+                        className={`font-medium text-sm ${
+                          isCurrent ? "text-teal" : "text-foreground"
+                        }`}
                       >
-                        {truncate(entry.userId)}
+                        {truncate(entry)}
                       </span>
                       {isCurrent && (
                         <Badge className="text-[10px] px-1 py-0 bg-teal/20 text-teal border-0">

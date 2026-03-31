@@ -20,6 +20,7 @@ actor {
     timestamp : Int;
   };
 
+  // UserData stays unchanged to preserve stable variable compatibility
   type UserData = {
     userId : Text;
     balance : Float;
@@ -28,9 +29,11 @@ actor {
     watchlist : [Text];
   };
 
+  type NameEntry = { userId : Text; name : Text };
+
   type Profile = { balance : Float };
   type TradeResult = { ok : Bool; message : Text };
-  type LeaderboardEntry = { userId : Text; balance : Float; portfolioValue : Float };
+  type LeaderboardEntry = { userId : Text; displayName : Text; balance : Float; portfolioValue : Float };
 
   type HttpHeader = { name : Text; value : Text };
 
@@ -59,6 +62,9 @@ actor {
   let ic : IC = actor ("aaaaa-aa");
 
   var users : [UserData] = [];
+
+  // Separate stable var for display names — adding a new stable var is always backward compatible
+  var userNames : [NameEntry] = [];
 
   func findUser(id : Text) : ?UserData {
     users.find(func u { u.userId == id });
@@ -89,9 +95,32 @@ actor {
     switch (findUser(id)) { case (?u) u; case null newUser(id) };
   };
 
+  func lookupName(id : Text) : Text {
+    switch (userNames.find(func e { e.userId == id })) {
+      case (?(entry)) entry.name;
+      case null "";
+    };
+  };
+
   public shared (msg) func initUser() : async () {
     let id = msg.caller.toText();
     if (findUser(id) == null) { upsertUser(newUser(id)) };
+  };
+
+  public shared (msg) func setDisplayName(name : Text) : async () {
+    let id = msg.caller.toText();
+    // Ensure user exists
+    if (findUser(id) == null) { upsertUser(newUser(id)) };
+    switch (userNames.find(func e { e.userId == id })) {
+      case null {
+        userNames := userNames.concat([{ userId = id; name = name }]);
+      };
+      case (?_) {
+        userNames := userNames.map(func e {
+          if (e.userId == id) { { userId = id; name = name } } else e
+        });
+      };
+    };
   };
 
   public shared (msg) func getProfile() : async Profile {
@@ -188,7 +217,12 @@ actor {
   public shared func getLeaderboard() : async [LeaderboardEntry] {
     let entries = users.map(func u {
       let pv = u.holdings.foldLeft(0.0, func(acc, h) { acc + h.quantity * h.avgBuyPrice });
-      let e : LeaderboardEntry = { userId = u.userId; balance = u.balance; portfolioValue = pv };
+      let e : LeaderboardEntry = {
+        userId = u.userId;
+        displayName = lookupName(u.userId);
+        balance = u.balance;
+        portfolioValue = pv;
+      };
       e;
     });
     let sorted = entries.sort(func(a, b) {
@@ -211,8 +245,6 @@ actor {
   };
 
   /// Fetch live prices from Yahoo Finance via IC HTTP outcall.
-  /// symbolsParam: comma-separated Yahoo Finance symbols, e.g. "AAPL,GC=F,RELIANCE.NS"
-  /// Returns raw JSON string from Yahoo Finance API.
   public shared func fetchYahooPrices(symbolsParam : Text) : async Text {
     let url = "https://query1.finance.yahoo.com/v8/finance/quote?symbols=" # symbolsParam # "&fields=regularMarketPrice,symbol";
     let request : HttpRequestArgs = {
@@ -239,7 +271,6 @@ actor {
           case null "";
         };
       } else {
-        // Try v7 as fallback
         let url2 = "https://query2.finance.yahoo.com/v7/finance/quote?symbols=" # symbolsParam # "&fields=regularMarketPrice,symbol";
         let req2 : HttpRequestArgs = {
           url = url2;

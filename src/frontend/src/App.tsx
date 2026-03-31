@@ -1,8 +1,11 @@
 import { Toaster } from "@/components/ui/sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { BottomNav } from "./components/BottomNav";
 import { type Page, Sidebar } from "./components/Sidebar";
+import { TickerBanner } from "./components/TickerBanner";
 import { TopBar } from "./components/TopBar";
+import { useActor } from "./hooks/useActor";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import { useAllPrices } from "./hooks/usePrices";
 import { useTradingData } from "./hooks/useTradingData";
@@ -22,9 +25,9 @@ function AppContent() {
     useInternetIdentity();
   const isAuthenticated = !!identity;
 
+  const { actor, isFetching: actorFetching } = useActor();
+
   const [activePage, setActivePage] = useState<Page>("Dashboard");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
 
   const {
     prices,
@@ -37,17 +40,28 @@ function AppContent() {
   refreshRef.current = trading.refresh;
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
-
-  useEffect(() => {
     if (isAuthenticated) {
       void refreshRef.current();
     }
   }, [isAuthenticated]);
+
+  // Register user on backend and sync stored name when actor is ready
+  useEffect(() => {
+    if (!actor || actorFetching || !identity) return;
+    const userId = identity.getPrincipal().toString();
+    const nameKey = `tradezone_name_${userId}`;
+    const storedName = localStorage.getItem(nameKey);
+    (async () => {
+      try {
+        await (actor as any).initUser();
+        if (storedName) {
+          await (actor as any).setDisplayName(storedName);
+        }
+      } catch {
+        // Backend unreachable — local data is the fallback
+      }
+    })();
+  }, [actor, actorFetching, identity]);
 
   if (isInitializing) {
     return (
@@ -79,6 +93,7 @@ function AppContent() {
             onBuy={trading.executeBuy}
             onSell={trading.executeSell}
             lastUpdated={lastUpdated}
+            userId={identity?.getPrincipal().toString()}
           />
         );
       case "Markets":
@@ -143,21 +158,17 @@ function AppContent() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar
-        activePage={activePage}
-        setActivePage={setActivePage}
-        isMobile={isMobile}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
+      <Sidebar activePage={activePage} setActivePage={setActivePage} />
       <div className="flex flex-col flex-1 overflow-hidden">
         <TopBar
           onLogout={clear}
           balance={trading.profile?.balance ?? 1000000}
-          onMenuClick={() => setSidebarOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto">{renderPage()}</main>
-        <footer className="px-4 py-2 border-t border-border text-center text-xs text-muted-foreground">
+        <TickerBanner prices={prices} />
+        <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+          {renderPage()}
+        </main>
+        <footer className="hidden md:block px-4 py-2 border-t border-border text-center text-xs text-muted-foreground">
           © {new Date().getFullYear()}. Built with ❤️ using{" "}
           <a
             href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
@@ -173,6 +184,11 @@ function AppContent() {
           </span>
         </footer>
       </div>
+      <BottomNav
+        activePage={activePage}
+        setActivePage={setActivePage}
+        onLogout={clear}
+      />
     </div>
   );
 }

@@ -10,10 +10,11 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Briefcase, TrendingDown, TrendingUp, Wallet } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PriceChart } from "../components/PriceChart";
 import { TradeModal } from "../components/TradeModal";
 import { ALL_INSTRUMENTS, formatPrice } from "../data/instruments";
+import { useActor } from "../hooks/useActor";
 import type { Holding, Profile } from "../hooks/useTradingData";
 import { isMarketOpen } from "../utils/marketHours";
 
@@ -24,6 +25,7 @@ interface DashboardProps {
   onBuy: (symbol: string, qty: number, price: number) => Promise<boolean>;
   onSell: (symbol: string, qty: number, price: number) => Promise<boolean>;
   lastUpdated?: Date | null;
+  userId?: string;
 }
 
 function KpiCard({
@@ -79,7 +81,9 @@ export function Dashboard({
   onBuy,
   onSell,
   lastUpdated,
+  userId,
 }: DashboardProps) {
+  const { actor } = useActor();
   const [chartSymbol, setChartSymbol] = useState("AAPL");
   const [tradeSymbol, setTradeSymbol] = useState("AAPL");
   const [tradeQty, setTradeQty] = useState("1");
@@ -87,6 +91,43 @@ export function Dashboard({
   const [tradeModal, setTradeModal] = useState<string | null>(null);
 
   const balance = profile?.balance ?? 1000000;
+
+  const nameKey = userId ? `tradezone_name_${userId}` : null;
+  const [displayName, setDisplayName] = useState<string>(() => {
+    if (!nameKey) return "Trader";
+    return localStorage.getItem(nameKey) || "";
+  });
+  const [nameInput, setNameInput] = useState("");
+  const [nameSaved, setNameSaved] = useState(() => {
+    if (!nameKey) return true;
+    return !!localStorage.getItem(nameKey);
+  });
+
+  useEffect(() => {
+    if (nameKey && !nameSaved) {
+      setDisplayName("");
+    }
+  }, [nameKey, nameSaved]);
+
+  function saveName() {
+    const trimmed = nameInput.trim();
+    if (!trimmed || !nameKey) return;
+    localStorage.setItem(nameKey, trimmed);
+    setDisplayName(trimmed);
+    setNameSaved(true);
+
+    // Persist name to backend (fire and forget)
+    if (actor) {
+      (async () => {
+        try {
+          await (actor as any).initUser();
+          await (actor as any).setDisplayName(trimmed);
+        } catch {
+          // Backend unavailable — name is saved locally, that's fine
+        }
+      })();
+    }
+  }
 
   // Portfolio value
   const portfolioValue = portfolio.reduce((sum, h) => {
@@ -125,10 +166,41 @@ export function Dashboard({
   return (
     <div className="p-4 md:p-6 space-y-5">
       {/* Welcome */}
+      {!nameSaved && (
+        <div className="bg-card border border-border rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-foreground">
+              What's your name?
+            </p>
+            <p className="text-xs text-muted-foreground">
+              We'll use this to personalise your dashboard and leaderboard.
+            </p>
+          </div>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Input
+              className="bg-secondary border-border text-sm h-8 w-full sm:w-36"
+              placeholder="e.g. xyz"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveName()}
+              autoFocus
+              data-ocid="dashboard.name.input"
+            />
+            <Button
+              className="bg-teal hover:bg-teal/80 text-background h-8 px-3 text-sm font-semibold"
+              onClick={saveName}
+              disabled={!nameInput.trim()}
+              data-ocid="dashboard.name.save_button"
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">
-            Welcome back, Dhairya 👋
+            Welcome back, {displayName || "Trader"} 👋
           </h1>
           <p className="text-sm text-muted-foreground">
             Here's your trading overview

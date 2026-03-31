@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useActor } from "./useActor";
+import { useInternetIdentity } from "./useInternetIdentity";
 
 export interface Profile {
   balance: number;
@@ -21,6 +23,7 @@ export interface Trade {
 
 export interface LeaderboardEntry {
   userId: string;
+  displayName: string;
   balance: number;
   portfolioValue: number;
 }
@@ -31,6 +34,7 @@ export interface TradingData {
   history: Trade[];
   watchlist: string[];
   leaderboard: LeaderboardEntry[];
+  displayName: string;
   isLoading: boolean;
   refresh: () => Promise<void>;
   addWatch: (symbol: string) => Promise<void>;
@@ -80,6 +84,11 @@ function saveData(data: StoredData) {
 }
 
 export function useTradingData(): TradingData {
+  const { actor, isFetching } = useActor();
+  const { identity } = useInternetIdentity();
+  const userId = identity?.getPrincipal().toString();
+  const nameKey = userId ? `tradezone_name_${userId}` : null;
+
   const [stored, setStored] = useState<StoredData>(loadData);
   // Keep a ref always in sync with latest stored — safe to read in callbacks
   const storedRef = useRef(stored);
@@ -89,6 +98,32 @@ export function useTradingData(): TradingData {
   useEffect(() => {
     saveData(stored);
   }, [stored]);
+
+  // Read displayName from localStorage
+  const displayName = nameKey ? localStorage.getItem(nameKey) || "" : "";
+
+  // Leaderboard fetched from backend
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+
+  useEffect(() => {
+    if (!actor || isFetching) return;
+    (async () => {
+      try {
+        const result = await (actor as any).getLeaderboard();
+        if (Array.isArray(result) && result.length > 0) {
+          const mapped: LeaderboardEntry[] = result.map((e: any) => ({
+            userId: String(e.userId ?? ""),
+            displayName: String(e.displayName ?? ""),
+            balance: Number(e.balance ?? 0),
+            portfolioValue: Number(e.portfolioValue ?? 0),
+          }));
+          setLeaderboard(mapped);
+        }
+      } catch {
+        // Backend unavailable — fallback to local user only
+      }
+    })();
+  }, [actor, isFetching]);
 
   const profile: Profile = { balance: stored.balance };
 
@@ -234,17 +269,26 @@ export function useTradingData(): TradingData {
     [],
   );
 
-  // Static leaderboard — in a real app this would be multi-user
-  const leaderboard: LeaderboardEntry[] = [
-    { userId: "You", balance: stored.balance, portfolioValue: 0 },
-  ];
+  // Use backend leaderboard if available; otherwise fall back to just the current user
+  const leaderboardData: LeaderboardEntry[] =
+    leaderboard.length > 0
+      ? leaderboard
+      : [
+          {
+            userId: "You",
+            displayName: displayName || "Trader",
+            balance: stored.balance,
+            portfolioValue: 0,
+          },
+        ];
 
   return {
     profile,
     portfolio: stored.portfolio,
     history: stored.history,
     watchlist: stored.watchlist,
-    leaderboard,
+    leaderboard: leaderboardData,
+    displayName,
     isLoading: false,
     refresh,
     addWatch,

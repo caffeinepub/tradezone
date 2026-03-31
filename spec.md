@@ -1,24 +1,37 @@
 # TradeZone
 
 ## Current State
-Backend has fetchYahooPrices using IC HTTP outcalls with transform=null. This causes silent failures because all replica nodes must return identical responses — any minor difference (like response headers or timestamps) breaks consensus. Frontend falls back to CORS proxies which are also unreliable.
+- Users type their name on the Dashboard (stored in localStorage under `tradezone_name_${userId}`).
+- `useTradingData.ts` leaderboard is a static single-entry array `[{ userId: "You", balance, portfolioValue: 0 }]` — no multi-user support.
+- `Leaderboard.tsx` falls back to mock data when `leaderboard.length === 0`, but since it always has 1 entry, only "You" ever appears.
+- Backend `main.mo` has `getLeaderboard()` and user management but no `displayName` field and the frontend never calls backend trading functions (all trading is localStorage-only).
+- `backendInterface` in `backend.d.ts` is empty — auto-generated from Motoko; will be regenerated after backend changes.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Transform function in backend to strip non-deterministic parts of HTTP responses
-- Additional free price API endpoints as fallback (Yahoo Finance v8 chart API)
-- Manual refresh button in the Markets page
+- `displayName : Text` field to `UserData` in backend
+- `setDisplayName(name: Text)` public shared function in backend (stores name against caller's principal)
+- `displayName` field to `LeaderboardEntry` type in backend
+- Frontend: after user saves name in Dashboard, call `actor.setDisplayName(name)` to register on backend
+- Frontend: `useTradingData` fetches real leaderboard from backend via `actor.getLeaderboard()` so all registered users appear
+- Leaderboard display: show `displayName` (if non-empty) instead of truncated `userId`
 
 ### Modify
-- Backend fetchYahooPrices to use proper transform function
-- Frontend price fetching to try multiple Yahoo Finance endpoints
-- Error feedback when prices are stale
+- `newUser()` in backend: add `displayName = ""` to initial user data
+- `getLeaderboard()` in backend: include `displayName` in each `LeaderboardEntry`
+- `useTradingData.ts`: add `userId` prop / read from hook context, fetch leaderboard from backend actor, refresh periodically
+- `Dashboard.tsx`: after `saveName()` saves to localStorage, also call `actor.setDisplayName(trimmed)` on the backend
+- `Leaderboard.tsx`: use `displayName` field when available; fall back to truncated `userId`
+- `LeaderboardEntry` TypeScript interface: add `displayName: string`
 
 ### Remove
-- Nothing removed
+- Static mock leaderboard hardcoded fallback in `useTradingData.ts` (the single `{ userId: "You" }` entry)
+- `MOCK_LEADERBOARD` can remain as a UI placeholder only when backend returns 0 entries
 
 ## Implementation Plan
-1. Update backend main.mo to add a transform function that keeps only the response body (strips headers/status nondeterminism)
-2. Update frontend to handle failures more gracefully and show manual refresh button
-3. Improve CORS proxy fallback with additional endpoints
+1. Update `src/backend/main.mo`: add `displayName` to `UserData` and `LeaderboardEntry`; add `setDisplayName` function; update `getLeaderboard` to return display names.
+2. Update frontend `LeaderboardEntry` interface in `useTradingData.ts` to include `displayName: string`.
+3. In `useTradingData.ts`: use backend actor to fetch leaderboard (with polling or on-demand refresh); expose `setDisplayName` helper.
+4. In `Dashboard.tsx`: when user saves name, also call `actor.setDisplayName`; pass actor via props or use `useActor` hook.
+5. In `Leaderboard.tsx`: render `entry.displayName || truncate(entry.userId)` as the trader name.
